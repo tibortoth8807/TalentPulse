@@ -1,0 +1,181 @@
+table Requisition
+
+	column RequisitionKey
+		dataType: int64
+		isHidden: true
+		isKey: true
+		lineageTag: col-req-key
+		summarizeBy: none
+		sourceColumn: RequisitionKey
+
+	column RequisitionCode
+		dataType: string
+		lineageTag: col-req-code
+		summarizeBy: none
+		sourceColumn: RequisitionCode
+
+	column OpenedDate
+		dataType: dateTime
+		isHidden: true
+		lineageTag: col-req-openeddate
+		summarizeBy: none
+		sourceColumn: OpenedDate
+
+	column FilledDate
+		dataType: dateTime
+		isHidden: true
+		lineageTag: col-req-filleddate
+		summarizeBy: none
+		sourceColumn: FilledDate
+
+	column CancelledDate
+		dataType: dateTime
+		isHidden: true
+		lineageTag: col-req-cancelleddate
+		summarizeBy: none
+		sourceColumn: CancelledDate
+
+	column OrgUnitKey
+		dataType: int64
+		isHidden: true
+		lineageTag: col-req-orgunitkey
+		summarizeBy: none
+		sourceColumn: OrgUnitKey
+
+	column LocationKey
+		dataType: int64
+		isHidden: true
+		lineageTag: col-req-locationkey
+		summarizeBy: none
+		sourceColumn: LocationKey
+
+	column JobKey
+		dataType: int64
+		isHidden: true
+		lineageTag: col-req-jobkey
+		summarizeBy: none
+		sourceColumn: JobKey
+
+	column HireSourceKey
+		dataType: int64
+		isHidden: true
+		lineageTag: col-req-hiresourcekey
+		summarizeBy: none
+		sourceColumn: HireSourceKey
+
+	column DaysToFill
+		dataType: int64
+		isHidden: true
+		lineageTag: col-req-daystofill
+		summarizeBy: sum
+		sourceColumn: DaysToFill
+
+	column HireCostEur
+		dataType: decimal
+		isHidden: true
+		lineageTag: col-req-hirecost
+		summarizeBy: sum
+		sourceColumn: HireCostEur
+
+	measure 'Requisitions Opened' = COUNTROWS ( Requisition )
+		formatString: #,0
+		lineageTag: meas-req-opened
+
+	measure 'Requisitions Filled' = ```
+			CALCULATE (
+			    COUNTROWS ( Requisition ),
+			    USERELATIONSHIP ( Requisition[FilledDate], 'Calendar'[Date] )
+			)
+			```
+		formatString: #,0
+		lineageTag: meas-req-filled
+		description: "Counted on the offer-accepted date (inactive relationship FilledDate -> Calendar)."
+
+	measure 'Open Requisitions' = ```
+			VAR AsOf = MIN ( MAX ( 'Calendar'[Date] ), [As Of Date] )
+			RETURN
+			    CALCULATE (
+			        COUNTROWS ( Requisition ),
+			        REMOVEFILTERS ( 'Calendar' ),
+			        Requisition[OpenedDate] <= AsOf,
+			        OR ( ISBLANK ( Requisition[FilledDate] ), Requisition[FilledDate] > AsOf ),
+			        OR ( ISBLANK ( Requisition[CancelledDate] ), Requisition[CancelledDate] > AsOf )
+			    )
+			```
+		formatString: #,0
+		lineageTag: meas-req-open
+		description: "Open at the end of the selected period: opened before, not yet filled or cancelled."
+
+	measure 'Open Requisitions > 60 Days' = ```
+			VAR AsOf = MIN ( MAX ( 'Calendar'[Date] ), [As Of Date] )
+			RETURN
+			    CALCULATE (
+			        [Open Requisitions],
+			        Requisition[OpenedDate] < AsOf - 60
+			    )
+			```
+		formatString: #,0
+		lineageTag: meas-req-open60
+
+	measure 'Avg Time to Fill (days)' = ```
+			CALCULATE (
+			    AVERAGE ( Requisition[DaysToFill] ),
+			    USERELATIONSHIP ( Requisition[FilledDate], 'Calendar'[Date] )
+			)
+			```
+		formatString: 0.0
+		lineageTag: meas-req-ttf
+
+	measure 'Median Time to Fill (days)' = ```
+			CALCULATE (
+			    MEDIAN ( Requisition[DaysToFill] ),
+			    USERELATIONSHIP ( Requisition[FilledDate], 'Calendar'[Date] )
+			)
+			```
+		formatString: 0.0
+		lineageTag: meas-req-medttf
+
+	measure 'Hiring Cost (EUR)' = ```
+			CALCULATE (
+			    SUM ( Requisition[HireCostEur] ),
+			    USERELATIONSHIP ( Requisition[FilledDate], 'Calendar'[Date] )
+			)
+			```
+		formatString: € #,0
+		lineageTag: meas-req-hiringcost
+
+	measure 'Cost per Hire (EUR)' = DIVIDE ( [Hiring Cost (EUR)], [Requisitions Filled] )
+		formatString: € #,0
+		lineageTag: meas-req-cph
+
+	partition Requisition = m
+		mode: import
+		source = ```
+			let
+			    Source = Csv.Document(
+			        File.Contents(DataFolder & "fact_requisition.csv"),
+			        [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]
+			    ),
+			    PromotedHeaders = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+			    Typed = Table.TransformColumnTypes(
+			        PromotedHeaders,
+			        {
+			        {"RequisitionKey", Int64.Type},
+			        {"RequisitionCode", type text},
+			        {"OpenedDate", type date},
+			        {"FilledDate", type date},
+			        {"CancelledDate", type date},
+			        {"OrgUnitKey", Int64.Type},
+			        {"LocationKey", Int64.Type},
+			        {"JobKey", Int64.Type},
+			        {"HireSourceKey", Int64.Type},
+			        {"DaysToFill", Int64.Type},
+			        {"HireCostEur", Currency.Type}
+			        },
+			        "en-US"
+			    )
+			in
+			    Typed
+			```
+
+	annotation PBI_ResultType = Table

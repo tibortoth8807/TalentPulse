@@ -1,0 +1,200 @@
+table Application
+
+	column ApplicationKey
+		dataType: int64
+		isHidden: true
+		isKey: true
+		lineageTag: col-app-key
+		summarizeBy: none
+		sourceColumn: ApplicationKey
+
+	column RequisitionKey
+		dataType: int64
+		isHidden: true
+		lineageTag: col-app-reqkey
+		summarizeBy: none
+		sourceColumn: RequisitionKey
+
+	column AppliedDate
+		dataType: dateTime
+		isHidden: true
+		lineageTag: col-app-applieddate
+		summarizeBy: none
+		sourceColumn: AppliedDate
+
+	column SourceKey
+		dataType: int64
+		isHidden: true
+		lineageTag: col-app-sourcekey
+		summarizeBy: none
+		sourceColumn: SourceKey
+
+	column OrgUnitKey
+		dataType: int64
+		isHidden: true
+		lineageTag: col-app-orgunitkey
+		summarizeBy: none
+		sourceColumn: OrgUnitKey
+
+	column LocationKey
+		dataType: int64
+		isHidden: true
+		lineageTag: col-app-locationkey
+		summarizeBy: none
+		sourceColumn: LocationKey
+
+	column JobKey
+		dataType: int64
+		isHidden: true
+		lineageTag: col-app-jobkey
+		summarizeBy: none
+		sourceColumn: JobKey
+
+	column ReachedScreen
+		dataType: int64
+		isHidden: true
+		lineageTag: col-app-screen
+		summarizeBy: sum
+		sourceColumn: ReachedScreen
+
+	column ReachedInterview
+		dataType: int64
+		isHidden: true
+		lineageTag: col-app-interview
+		summarizeBy: sum
+		sourceColumn: ReachedInterview
+
+	column ReachedOffer
+		dataType: int64
+		isHidden: true
+		lineageTag: col-app-offer
+		summarizeBy: sum
+		sourceColumn: ReachedOffer
+
+	column IsHire
+		dataType: int64
+		isHidden: true
+		lineageTag: col-app-ishire
+		summarizeBy: sum
+		sourceColumn: IsHire
+
+	column Outcome
+		dataType: string
+		lineageTag: col-app-outcome
+		summarizeBy: none
+		sourceColumn: Outcome
+
+	column DaysToHire
+		dataType: int64
+		isHidden: true
+		lineageTag: col-app-daystohire
+		summarizeBy: sum
+		sourceColumn: DaysToHire
+
+	measure Applications = COUNTROWS ( Application )
+		formatString: #,0
+		lineageTag: meas-app-applications
+
+	measure Screened = SUM ( Application[ReachedScreen] )
+		formatString: #,0
+		lineageTag: meas-app-screened
+
+	measure Interviewed = SUM ( Application[ReachedInterview] )
+		formatString: #,0
+		lineageTag: meas-app-interviewed
+
+	measure Offers = SUM ( Application[ReachedOffer] )
+		formatString: #,0
+		lineageTag: meas-app-offers
+
+	measure 'Accepted Offers' = SUM ( Application[IsHire] )
+		formatString: #,0
+		lineageTag: meas-app-accepted
+
+	measure 'Screen Pass Rate' = DIVIDE ( [Screened], [Applications] )
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: meas-app-screenrate
+
+	measure 'Interview Rate' = DIVIDE ( [Interviewed], [Screened] )
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: meas-app-interviewrate
+
+	measure 'Offer Rate' = DIVIDE ( [Offers], [Interviewed] )
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: meas-app-offerrate
+
+	measure 'Offer Acceptance Rate' = ```
+			DIVIDE (
+			    [Accepted Offers],
+			    CALCULATE ( [Offers], Application[Outcome] IN { "Hired", "OfferAccepted", "OfferDeclined" } )
+			)
+			```
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: meas-app-oar
+		description: "Accepted / decided offers (open offers are excluded)."
+
+	measure 'Applications per Hire' = DIVIDE ( [Applications], [Accepted Offers] )
+		formatString: 0.0
+		lineageTag: meas-app-aph
+
+	measure 'Avg Time to Hire (days)' = AVERAGE ( Application[DaysToHire] )
+		formatString: 0.0
+		lineageTag: meas-app-tth
+
+	measure 'Source Hire Rate' = DIVIDE ( [Accepted Offers], [Applications] )
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: meas-app-sourcehirerate
+		description: "Hires per application - the quality of a source."
+
+	measure 'Funnel Count' = ```
+			SWITCH (
+			    SELECTEDVALUE ( FunnelStage[Stage] ),
+			    "Applied", [Applications],
+			    "Screened", [Screened],
+			    "Interviewed", [Interviewed],
+			    "Offered", [Offers],
+			    "Hired", [Accepted Offers]
+			)
+			```
+		lineageTag: meas-app-funnel
+		description: "Value for the funnel visual, driven by the FunnelStage table."
+
+	measure 'Funnel Conversion %' = ```
+			DIVIDE ( [Funnel Count], CALCULATE ( [Funnel Count], FunnelStage[Stage] = "Applied" ) )
+			```
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: meas-app-funnelconv
+
+	partition Application = m
+		mode: import
+		source = ```
+			let
+			    Source = Csv.Document(
+			        File.Contents(DataFolder & "fact_application.csv"),
+			        [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]
+			    ),
+			    PromotedHeaders = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+			    Typed = Table.TransformColumnTypes(
+			        PromotedHeaders,
+			        {
+			        {"ApplicationKey", Int64.Type},
+			        {"RequisitionKey", Int64.Type},
+			        {"AppliedDate", type date},
+			        {"SourceKey", Int64.Type},
+			        {"OrgUnitKey", Int64.Type},
+			        {"LocationKey", Int64.Type},
+			        {"JobKey", Int64.Type},
+			        {"ReachedScreen", Int64.Type},
+			        {"ReachedInterview", Int64.Type},
+			        {"ReachedOffer", Int64.Type},
+			        {"IsHire", Int64.Type},
+			        {"Outcome", type text},
+			        {"DaysToHire", Int64.Type}
+			        },
+			        "en-US"
+			    )
+			in
+			    Typed
+			```
+
+	annotation PBI_ResultType = Table

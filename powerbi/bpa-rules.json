@@ -1,0 +1,97 @@
+[
+  {
+    "ID": "HIDE_FOREIGN_KEYS",
+    "Name": "Hide foreign key columns",
+    "Category": "Model Design",
+    "Description": "Foreign key columns in fact tables should be hidden from report view. They should be used for relationships only.",
+    "Severity": 2,
+    "Scope": "Column",
+    "Expression": "!IsHidden && Table.ObjectType == \"Table\" && Name.EndsWith(\"Key\") && Table.UsedInRelationships.Any(FromTable == Table && FromColumn == outerIt)",
+    "FixExpression": "IsHidden = true",
+    "Remarks": "Keys used in relationships must not be visible to report consumers."
+  },
+  {
+    "ID": "NO_BIDIRECTIONAL_RELATIONSHIPS",
+    "Name": "Avoid bidirectional relationships",
+    "Category": "Model Design",
+    "Description": "Bidirectional cross-filter causes ambiguous filter paths and unpredictable measure results. Use CROSSFILTER() in DAX instead.",
+    "Severity": 3,
+    "Scope": "Relationship",
+    "Expression": "CrossFilteringBehavior == CrossFilteringBehavior.BothDirections",
+    "Remarks": "This model deliberately uses single-direction filters only."
+  },
+  {
+    "ID": "MISSING_MEASURE_DESCRIPTION",
+    "Name": "Add descriptions to complex measures",
+    "Category": "Documentation",
+    "Description": "Measures with more than 2 DAX lines or using CALCULATE should have a description for self-service users.",
+    "Severity": 1,
+    "Scope": "Measure",
+    "Expression": "string.IsNullOrWhiteSpace(Description) && (Expression.Contains(\"CALCULATE\") || Expression.Split('\\n').Length > 2)",
+    "Remarks": "Descriptions show up in the field list tooltip."
+  },
+  {
+    "ID": "DIVIDE_INSTEAD_OF_SLASH",
+    "Name": "Use DIVIDE() instead of /",
+    "Category": "DAX Best Practices",
+    "Description": "Direct division with / will return an error on divide-by-zero. Use DIVIDE(numerator, denominator) for safe division.",
+    "Severity": 2,
+    "Scope": "Measure, CalculatedColumn",
+    "Expression": "RegExMatch(Expression, @\"(?<![\\w\\\"'\\]])\\s*/\\s*(?![\\*\\+\\-/])\")",
+    "Remarks": "DIVIDE handles blank/zero gracefully."
+  },
+  {
+    "ID": "MISSING_FORMAT_STRING_NUMERIC",
+    "Name": "Numeric measures must have a format string",
+    "Category": "Formatting",
+    "Description": "Numeric measures without a format string will display raw decimal values to report users.",
+    "Severity": 2,
+    "Scope": "Measure",
+    "Expression": "string.IsNullOrWhiteSpace(FormatString) && DataType == DataType.Decimal"
+  },
+  {
+    "ID": "NO_COLUMNS_DIRECTLY_IN_FILTERS",
+    "Name": "Avoid filtering columns with implicit =",
+    "Category": "DAX Best Practices",
+    "Description": "CALCULATE( expr, Table[Column] = \"Value\" ) is a shorthand that bypasses context transition. Use KEEPFILTERS or explicit FILTER when needed.",
+    "Severity": 1,
+    "Scope": "Measure",
+    "Expression": "RegExMatch(Expression, @\"CALCULATE\\s*\\([^,]+,\\s*[A-Za-z]+\\[[A-Za-z ]+\\]\\s*=\")"
+  },
+  {
+    "ID": "UNUSED_COLUMNS",
+    "Name": "Remove unused columns",
+    "Category": "Performance",
+    "Description": "Columns not used in relationships, measures, calculated columns, or visuals inflate the model size.",
+    "Severity": 1,
+    "Scope": "Column",
+    "Expression": "!IsHidden && !UsedInRelationships.Any() && !Model.AllMeasures.Any(m => m.Expression.Contains(outerIt.DaxObjectFullName)) && !Table.CalculatedColumns.Any(c => c.Expression.Contains(outerIt.DaxObjectFullName))"
+  },
+  {
+    "ID": "SORT_BY_COLUMN_MISSING",
+    "Name": "Text columns used in sorting must have SortByColumn set",
+    "Category": "Model Design",
+    "Description": "Month names, levels, bands etc. must be sorted by an integer column, not alphabetically.",
+    "Severity": 2,
+    "Scope": "Column",
+    "Expression": "DataType == DataType.String && string.IsNullOrEmpty(SortByColumn?.Name) && (Name.Contains(\"Month\") || Name.Contains(\"Band\") || Name.Contains(\"Level\") || Name.Contains(\"Stage\"))"
+  },
+  {
+    "ID": "DATE_TABLE_MARKED",
+    "Name": "Calendar table must be marked as a date table",
+    "Category": "Model Design",
+    "Description": "Without marking the Calendar as a date table, DAX time-intelligence functions may return incorrect results.",
+    "Severity": 3,
+    "Scope": "Table",
+    "Expression": "Name == \"Calendar\" && !DataCategory.Equals(\"Time\", StringComparison.OrdinalIgnoreCase)"
+  },
+  {
+    "ID": "PREFER_RELATED_TO_LOOKUPVALUE",
+    "Name": "Prefer RELATED() over LOOKUPVALUE() in calculated columns",
+    "Category": "DAX Best Practices",
+    "Description": "RELATED() uses the existing relationship path and is faster than LOOKUPVALUE() for related table lookups.",
+    "Severity": 1,
+    "Scope": "CalculatedColumn",
+    "Expression": "Expression.Contains(\"LOOKUPVALUE\")"
+  }
+]

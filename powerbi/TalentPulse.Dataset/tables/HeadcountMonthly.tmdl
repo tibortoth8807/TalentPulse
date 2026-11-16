@@ -1,0 +1,182 @@
+table HeadcountMonthly
+
+	column MonthEnd
+		dataType: dateTime
+		isHidden: true
+		lineageTag: col-hc-monthend
+		summarizeBy: none
+		sourceColumn: MonthEnd
+
+	column EmployeeKey
+		dataType: int64
+		isHidden: true
+		isKey: true
+		lineageTag: col-hc-empkey
+		summarizeBy: none
+		sourceColumn: EmployeeKey
+
+	column OrgUnitKey
+		dataType: int64
+		isHidden: true
+		lineageTag: col-hc-orgunitkey
+		summarizeBy: none
+		sourceColumn: OrgUnitKey
+
+	column LocationKey
+		dataType: int64
+		isHidden: true
+		lineageTag: col-hc-locationkey
+		summarizeBy: none
+		sourceColumn: LocationKey
+
+	column JobKey
+		dataType: int64
+		isHidden: true
+		lineageTag: col-hc-jobkey
+		summarizeBy: none
+		sourceColumn: JobKey
+
+	column TenureMonths
+		dataType: int64
+		isHidden: true
+		lineageTag: col-hc-tenuremonths
+		summarizeBy: sum
+		sourceColumn: TenureMonths
+
+	column Age
+		dataType: int64
+		isHidden: true
+		lineageTag: col-hc-age
+		summarizeBy: sum
+		sourceColumn: Age
+
+	column FTE
+		dataType: decimal
+		lineageTag: col-hc-fte
+		summarizeBy: sum
+		sourceColumn: FTE
+
+	calculatedColumn 'Tenure Band'
+		dataType: string
+		lineageTag: col-hc-tenureband
+		summarizeBy: none
+		expression: ```
+			SWITCH (
+			    TRUE (),
+			    HeadcountMonthly[TenureMonths] < 12, "< 1 year",
+			    HeadcountMonthly[TenureMonths] < 36, "1-3 years",
+			    HeadcountMonthly[TenureMonths] < 60, "3-5 years",
+			    "5+ years"
+			)
+			```
+		sortByColumn: 'Tenure Band Order'
+
+	calculatedColumn 'Tenure Band Order'
+		dataType: int64
+		isHidden: true
+		lineageTag: col-hc-tenurebandorder
+		summarizeBy: none
+		expression: ```
+			SWITCH ( TRUE (), HeadcountMonthly[TenureMonths] < 12, 1, HeadcountMonthly[TenureMonths] < 36, 2, HeadcountMonthly[TenureMonths] < 60, 3, 4 )
+			```
+
+	calculatedColumn 'Age Band'
+		dataType: string
+		lineageTag: col-hc-ageband
+		summarizeBy: none
+		expression: ```
+			SWITCH ( TRUE (), HeadcountMonthly[Age] < 25, "< 25", HeadcountMonthly[Age] < 35, "25-34", HeadcountMonthly[Age] < 45, "35-44", HeadcountMonthly[Age] < 55, "45-54", "55+" )
+			```
+
+	measure 'As Of Date' = CALCULATE ( MAX ( HeadcountMonthly[MonthEnd] ), REMOVEFILTERS () )
+		formatString: yyyy-mm-dd
+		lineageTag: meas-hc-asofdate
+
+	measure Headcount = ```
+			VAR LastSnapshot = MAX ( HeadcountMonthly[MonthEnd] )
+			RETURN
+			    CALCULATE ( COUNTROWS ( HeadcountMonthly ), HeadcountMonthly[MonthEnd] = LastSnapshot )
+			```
+		formatString: #,0
+		lineageTag: meas-hc-headcount
+		description: "Point-in-time headcount at the last month-end inside the selected period (semi-additive)."
+
+	measure FTE = ```
+			VAR LastSnapshot = MAX ( HeadcountMonthly[MonthEnd] )
+			RETURN
+			    CALCULATE ( SUM ( HeadcountMonthly[FTE] ), HeadcountMonthly[MonthEnd] = LastSnapshot )
+			```
+		formatString: #,0.0
+		lineageTag: meas-hc-fte
+
+	measure 'Average Headcount' = ```
+			AVERAGEX ( VALUES ( HeadcountMonthly[MonthEnd] ), CALCULATE ( COUNTROWS ( HeadcountMonthly ) ) )
+			```
+		formatString: #,0.0
+		lineageTag: meas-hc-avgheadcount
+		description: "Average of the month-end headcounts in the period - the denominator of every rate."
+
+	measure 'Headcount PY' = CALCULATE ( [Headcount], DATEADD ( 'Calendar'[Date], -1, YEAR ) )
+		formatString: #,0
+		lineageTag: meas-hc-py
+
+	measure 'Headcount YoY %' = ```
+			VAR Previous = [Headcount PY]
+			RETURN
+			    DIVIDE ( [Headcount] - Previous, Previous )
+			```
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: meas-hc-yoy
+
+	measure 'Average Tenure (years)' = ```
+			VAR LastSnapshot = MAX ( HeadcountMonthly[MonthEnd] )
+			RETURN
+			    DIVIDE ( CALCULATE ( AVERAGE ( HeadcountMonthly[TenureMonths] ), HeadcountMonthly[MonthEnd] = LastSnapshot ), 12 )
+			```
+		formatString: 0.0
+		lineageTag: meas-hc-avgtenure
+
+	measure 'Average Age' = ```
+			VAR LastSnapshot = MAX ( HeadcountMonthly[MonthEnd] )
+			RETURN
+			    CALCULATE ( AVERAGE ( HeadcountMonthly[Age] ), HeadcountMonthly[MonthEnd] = LastSnapshot )
+			```
+		formatString: 0.0
+		lineageTag: meas-hc-avgage
+
+	measure 'Female %' = DIVIDE ( CALCULATE ( [Headcount], Employee[Gender] = "Female" ), [Headcount] )
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: meas-hc-female
+
+	measure 'Remote / Hybrid %' = DIVIDE ( CALCULATE ( [Headcount], Employee[WorkModel] IN { "Remote", "Hybrid" } ), [Headcount] )
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: meas-hc-remote
+
+	partition HeadcountMonthly = m
+		mode: import
+		source = ```
+			let
+			    Source = Csv.Document(
+			        File.Contents(DataFolder & "fact_headcount_monthly.csv"),
+			        [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]
+			    ),
+			    PromotedHeaders = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+			    Typed = Table.TransformColumnTypes(
+			        PromotedHeaders,
+			        {
+			        {"MonthEnd", type date},
+			        {"EmployeeKey", Int64.Type},
+			        {"OrgUnitKey", Int64.Type},
+			        {"LocationKey", Int64.Type},
+			        {"JobKey", Int64.Type},
+			        {"TenureMonths", Int64.Type},
+			        {"Age", Int64.Type},
+			        {"FTE", Currency.Type}
+			        },
+			        "en-US"
+			    )
+			in
+			    Typed
+			```
+
+	annotation PBI_ResultType = Table

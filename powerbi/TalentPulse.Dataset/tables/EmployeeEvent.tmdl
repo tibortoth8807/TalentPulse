@@ -1,0 +1,153 @@
+table EmployeeEvent
+
+	column EventKey
+		dataType: int64
+		isHidden: true
+		isKey: true
+		lineageTag: col-ee-eventkey
+		summarizeBy: none
+		sourceColumn: EventKey
+
+	column EmployeeKey
+		dataType: int64
+		isHidden: true
+		lineageTag: col-ee-empkey
+		summarizeBy: none
+		sourceColumn: EmployeeKey
+
+	column Date
+		dataType: dateTime
+		isHidden: true
+		lineageTag: col-ee-date
+		summarizeBy: none
+		sourceColumn: Date
+
+	column EventType
+		dataType: string
+		lineageTag: col-ee-eventtype
+		summarizeBy: none
+		sourceColumn: EventType
+
+	column OrgUnitKey
+		dataType: int64
+		isHidden: true
+		lineageTag: col-ee-orgunitkey
+		summarizeBy: none
+		sourceColumn: OrgUnitKey
+
+	column LocationKey
+		dataType: int64
+		isHidden: true
+		lineageTag: col-ee-locationkey
+		summarizeBy: none
+		sourceColumn: LocationKey
+
+	column JobKey
+		dataType: int64
+		isHidden: true
+		lineageTag: col-ee-jobkey
+		summarizeBy: none
+		sourceColumn: JobKey
+
+	calculatedColumn 'Tenure at Event (months)'
+		dataType: int64
+		lineageTag: col-ee-tenureatvent
+		summarizeBy: sum
+		expression: DATEDIFF ( RELATED ( Employee[HireDate] ), EmployeeEvent[Date], MONTH )
+
+	measure Hires = CALCULATE ( COUNTROWS ( EmployeeEvent ), EmployeeEvent[EventType] = "Hire" )
+		formatString: #,0
+		lineageTag: meas-ee-hires
+
+	measure Leavers = CALCULATE ( COUNTROWS ( EmployeeEvent ), EmployeeEvent[EventType] = "Termination" )
+		formatString: #,0
+		lineageTag: meas-ee-leavers
+
+	measure 'Voluntary Leavers' = CALCULATE ( [Leavers], Employee[TerminationType] = "Voluntary" )
+		formatString: #,0
+		lineageTag: meas-ee-volleavers
+
+	measure Promotions = CALCULATE ( COUNTROWS ( EmployeeEvent ), EmployeeEvent[EventType] = "Promotion" )
+		formatString: #,0
+		lineageTag: meas-ee-promotions
+
+	measure 'Net Change' = [Hires] - [Leavers]
+		formatString: #,0
+		lineageTag: meas-ee-netchange
+
+	measure 'Early Leavers %' = ```
+			VAR Early =
+			    CALCULATE (
+			        [Leavers],
+			        FILTER (
+			            EmployeeEvent,
+			            DATEDIFF ( RELATED ( Employee[HireDate] ), EmployeeEvent[Date], MONTH ) < 12
+			        )
+			    )
+			RETURN
+			    DIVIDE ( Early, [Leavers] )
+			```
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: meas-ee-earlyleavers
+		description: "Leavers who left within 12 months of joining, as a share of all leavers."
+
+	measure 'Attrition Rate' = DIVIDE ( [Leavers], [Average Headcount] )
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: meas-ee-attrition
+		description: "Attrition in the selected period: leavers / average headcount (not annualized)."
+
+	measure 'Attrition Rate R12M' = ```
+			VAR EndDate = MIN ( MAX ( 'Calendar'[Date] ), [As Of Date] )
+			VAR Period = DATESINPERIOD ( 'Calendar'[Date], EndDate, -12, MONTH )
+			RETURN
+			    DIVIDE ( CALCULATE ( [Leavers], Period ), CALCULATE ( [Average Headcount], Period ) )
+			```
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: meas-ee-attritionr12m
+		description: "Rolling 12 months ending at the last date of the selection."
+
+	measure 'Voluntary Attrition R12M' = ```
+			VAR EndDate = MIN ( MAX ( 'Calendar'[Date] ), [As Of Date] )
+			VAR Period = DATESINPERIOD ( 'Calendar'[Date], EndDate, -12, MONTH )
+			RETURN
+			    DIVIDE ( CALCULATE ( [Voluntary Leavers], Period ), CALCULATE ( [Average Headcount], Period ) )
+			```
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: meas-ee-volattritionr12m
+
+	measure 'Promotion Rate R12M' = ```
+			VAR EndDate = MIN ( MAX ( 'Calendar'[Date] ), [As Of Date] )
+			VAR Period = DATESINPERIOD ( 'Calendar'[Date], EndDate, -12, MONTH )
+			RETURN
+			    DIVIDE ( CALCULATE ( [Promotions], Period ), CALCULATE ( [Average Headcount], Period ) )
+			```
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: meas-ee-promotionrate
+
+	partition EmployeeEvent = m
+		mode: import
+		source = ```
+			let
+			    Source = Csv.Document(
+			        File.Contents(DataFolder & "fact_employee_event.csv"),
+			        [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]
+			    ),
+			    PromotedHeaders = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+			    Typed = Table.TransformColumnTypes(
+			        PromotedHeaders,
+			        {
+			        {"EventKey", Int64.Type},
+			        {"EmployeeKey", Int64.Type},
+			        {"Date", type date},
+			        {"EventType", type text},
+			        {"OrgUnitKey", Int64.Type},
+			        {"LocationKey", Int64.Type},
+			        {"JobKey", Int64.Type}
+			        },
+			        "en-US"
+			    )
+			in
+			    Typed
+			```
+
+	annotation PBI_ResultType = Table

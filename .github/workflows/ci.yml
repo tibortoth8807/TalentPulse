@@ -14,6 +14,9 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: true
 
 jobs:
+  # ─────────────────────────────────────────────────────────
+  # Job 1: .NET build, test, data generation
+  # ─────────────────────────────────────────────────────────
   generate:
     name: Build, test and generate data
     runs-on: ubuntu-latest
@@ -47,3 +50,62 @@ jobs:
         with:
           name: talentpulse-data
           path: generated
+
+  # ─────────────────────────────────────────────────────────
+  # Job 2: Power BI model quality gate (Tabular Editor 2 BPA)
+  # ─────────────────────────────────────────────────────────
+  powerbi-bpa:
+    name: Power BI – Best Practice Analyzer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Tabular Editor 2 runs on .NET Framework / Mono on Linux
+      - name: Install Mono
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y mono-complete --no-install-recommends
+
+      - name: Download Tabular Editor 2
+        env:
+          TE2_VERSION: "2.21.6"
+        run: |
+          curl -fsSL \
+            "https://github.com/TabularEditor/TabularEditor/releases/download/${TE2_VERSION}/TabularEditor.Portable.zip" \
+            -o te2.zip
+          unzip -q te2.zip -d te2
+
+      - name: Run Best Practice Analyzer
+        id: bpa
+        run: |
+          # Exit codes: 0 = OK, 1 = warnings, 2 = errors (rule severity ≥ 2 violated)
+          # -A  = rule file, -V = minimum severity to treat as error (2 = Error)
+          # -TRX = output a TRX test results file (parseable by GitHub)
+          mono te2/TabularEditor.exe \
+            "powerbi/TalentPulse.Dataset" \
+            -A "powerbi/bpa-rules.json" \
+            -V 2 \
+            -TRX bpa-results.trx \
+            2>&1 | tee bpa-output.txt
+          BPA_EXIT=${PIPESTATUS[0]}
+          echo "exit_code=${BPA_EXIT}" >> "$GITHUB_OUTPUT"
+          exit $BPA_EXIT
+
+      # Always publish results, even on failure, so reviewers see what broke
+      - name: Publish BPA results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bpa-results
+          path: |
+            bpa-results.trx
+            bpa-output.txt
+
+      # Annotate the PR with the violations (requires GitHub token)
+      - name: Annotate PR with BPA violations
+        if: failure() && github.event_name == 'pull_request'
+        run: |
+          echo "::error::Power BI Best Practice Analyzer found violations. Download the 'bpa-results' artifact for details."
+          grep -E "^Error|^Warning" bpa-output.txt | while IFS= read -r line; do
+            echo "::warning::${line}"
+          done || true

@@ -1,0 +1,126 @@
+relationship HeadcountMonthly_MonthEnd_Calendar_Date
+	fromTable: HeadcountMonthly
+	fromColumn: MonthEnd
+	toTable: Calendar
+	toColumn: Date
+
+relationship HeadcountMonthly_EmployeeKey_Employee_EmployeeKey
+	fromTable: HeadcountMonthly
+	fromColumn: EmployeeKey
+	toTable: Employee
+	toColumn: EmployeeKey
+
+relationship HeadcountMonthly_OrgUnitKey_OrgUnit_OrgUnitKey
+	fromTable: HeadcountMonthly
+	fromColumn: OrgUnitKey
+	toTable: OrgUnit
+	toColumn: OrgUnitKey
+
+relationship HeadcountMonthly_LocationKey_Location_LocationKey
+	fromTable: HeadcountMonthly
+	fromColumn: LocationKey
+	toTable: Location
+	toColumn: LocationKey
+
+relationship HeadcountMonthly_JobKey_Job_JobKey
+	fromTable: HeadcountMonthly
+	fromColumn: JobKey
+	toTable: Job
+	toColumn: JobKey
+
+relationship EmployeeEvent_Date_Calendar_Date
+	fromTable: EmployeeEvent
+	fromColumn: Date
+	toTable: Calendar
+	toColumn: Date
+
+relationship EmployeeEvent_EmployeeKey_Employee_EmployeeKey
+	fromTable: EmployeeEvent
+	fromColumn: EmployeeKey
+	toTable: Employee
+	toColumn: EmployeeKey
+
+relationship EmployeeEvent_OrgUnitKey_OrgUnit_OrgUnitKey
+	fromTable: EmployeeEvent
+	fromColumn: OrgUnitKey
+	toTable: OrgUnit
+	toColumn: OrgUnitKey
+
+relationship EmployeeEvent_LocationKey_Location_LocationKey
+	fromTable: EmployeeEvent
+	fromColumn: LocationKey
+	toTable: Location
+	toColumn: LocationKey
+
+relationship EmployeeEvent_JobKey_Job_JobKey
+	fromTable: EmployeeEvent
+	fromColumn: JobKey
+	toTable: Job
+	toColumn: JobKey
+
+relationship Requisition_OpenedDate_Calendar_Date
+	fromTable: Requisition
+	fromColumn: OpenedDate
+	toTable: Calendar
+	toColumn: Date
+
+relationship Requisition_FilledDate_Calendar_Date
+	fromTable: Requisition
+	fromColumn: FilledDate
+	toTable: Calendar
+	toColumn: Date
+	isActive: false
+
+relationship Requisition_OrgUnitKey_OrgUnit_OrgUnitKey
+	fromTable: Requisition
+	fromColumn: OrgUnitKey
+	toTable: OrgUnit
+	toColumn: OrgUnitKey
+
+relationship Requisition_LocationKey_Location_LocationKey
+	fromTable: Requisition
+	fromColumn: LocationKey
+	toTable: Location
+	toColumn: LocationKey
+
+relationship Requisition_JobKey_Job_JobKey
+	fromTable: Requisition
+	fromColumn: JobKey
+	toTable: Job
+	toColumn: JobKey
+
+relationship Requisition_HireSourceKey_Source_SourceKey
+	fromTable: Requisition
+	fromColumn: HireSourceKey
+	toTable: Source
+	toColumn: SourceKey
+
+relationship Application_AppliedDate_Calendar_Date
+	fromTable: Application
+	fromColumn: AppliedDate
+	toTable: Calendar
+	toColumn: Date
+
+relationship Application_SourceKey_Source_SourceKey
+	fromTable: Application
+	fromColumn: SourceKey
+	toTable: Source
+	toColumn: SourceKey
+
+relationship Application_OrgUnitKey_OrgUnit_OrgUnitKey
+	fromTable: Application
+	fromColumn: OrgUnitKey
+	toTable: OrgUnit
+	toColumn: OrgUnitKey
+
+relationship Application_LocationKey_Location_LocationKey
+	fromTable: Application
+	fromColumn: LocationKey
+	toTable: Location
+	toColumn: LocationKey
+
+relationship Application_JobKey_Job_JobKey
+	fromTable: Application
+	fromColumn: JobKey
+	toTable: Job
+	toColumn: JobKey

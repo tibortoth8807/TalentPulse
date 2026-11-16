@@ -1,0 +1,22 @@
+model TalentPulse
+	culture: en-US
+	dataAccessOptions
+		legacyRedirects: true
+		returnErrorValuesAsNull: true
+	defaultPowerBIDataSourceVersion: powerBI_V3
+	sourceQueryCulture: en-US
+
+	ref table Calendar
+	ref table Location
+	ref table OrgUnit
+	ref table Job
+	ref table Source
+	ref table Employee
+	ref table SecurityUserCountry
+	ref table FunnelStage
+	ref table HeadcountMonthly
+	ref table EmployeeEvent
+	ref table Requisition
+	ref table Application
+
+	ref role 'Country HR'

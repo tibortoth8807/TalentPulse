@@ -1,0 +1,31 @@
+table FunnelStage
+
+	column Stage
+		dataType: string
+		isKey: true
+		lineageTag: col-funnel-stage
+		summarizeBy: none
+
+	column StageOrder
+		dataType: int64
+		isHidden: true
+		lineageTag: col-funnel-stageorder
+		summarizeBy: none
+
+	partition FunnelStage = calculated
+		mode: import
+		source = ```
+			DATATABLE (
+			    "Stage", STRING,
+			    "StageOrder", INTEGER,
+			    {
+			        { "Applied", 1 },
+			        { "Screened", 2 },
+			        { "Interviewed", 3 },
+			        { "Offered", 4 },
+			        { "Hired", 5 }
+			    }
+			)
+			```
+
+	annotation PBI_ResultType = Table

@@ -1,0 +1,52 @@
+table Location
+
+	column LocationKey
+		dataType: int64
+		isHidden: true
+		isKey: true
+		lineageTag: col-location-key
+		summarizeBy: none
+		sourceColumn: LocationKey
+
+	column City
+		dataType: string
+		lineageTag: col-location-city
+		summarizeBy: none
+		sourceColumn: City
+
+	column Country
+		dataType: string
+		lineageTag: col-location-country
+		summarizeBy: none
+		sourceColumn: Country
+
+	column Region
+		dataType: string
+		lineageTag: col-location-region
+		summarizeBy: none
+		sourceColumn: Region
+
+	partition Location = m
+		mode: import
+		source = ```
+			let
+			    Source = Csv.Document(
+			        File.Contents(DataFolder & "dim_location.csv"),
+			        [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]
+			    ),
+			    PromotedHeaders = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+			    Typed = Table.TransformColumnTypes(
+			        PromotedHeaders,
+			        {
+			        {"LocationKey", Int64.Type},
+			        {"City", type text},
+			        {"Country", type text},
+			        {"Region", type text}
+			        },
+			        "en-US"
+			    )
+			in
+			    Typed
+			```
+
+	annotation PBI_ResultType = Table

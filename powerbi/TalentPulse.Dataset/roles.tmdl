@@ -1,0 +1,8 @@
+role 'Country HR'
+	modelPermission: read
+
+	tablePermission Location = [Country] IN CALCULATETABLE ( VALUES ( SecurityUserCountry[Country] ), SecurityUserCountry[UserEmail] = USERPRINCIPALNAME () )
+
+	tablePermission Employee = [LocationKey] IN CALCULATETABLE ( VALUES ( Location[LocationKey] ), Location[Country] IN CALCULATETABLE ( VALUES ( SecurityUserCountry[Country] ), SecurityUserCountry[UserEmail] = USERPRINCIPALNAME () ) )
+
+	tablePermission SecurityUserCountry = [UserEmail] = USERPRINCIPALNAME ()
