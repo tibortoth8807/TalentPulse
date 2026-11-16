@@ -1,0 +1,22 @@
+table WhatIf_RecruiterCapacity
+	lineageTag: tbl-whatif-reccap
+
+	column 'Hires per Recruiter per Year'
+		dataType: int64
+		isKey: true
+		lineageTag: col-wrc-cap
+		summarizeBy: none
+		expression: GENERATESERIES(10, 80, 5)
+		formatString: #,0
+
+	measure 'Recruiter Capacity Value' = SELECTEDVALUE('WhatIf_RecruiterCapacity'[Hires per Recruiter per Year], 30)
+		formatString: #,0
+		lineageTag: meas-wrc-value
+		description: "How many hires a single recruiter closes per year. Default 30 (industry median). Adjust based on your team's actual throughput."
+
+	partition WhatIf_RecruiterCapacity = calculated
+		mode: import
+		source = GENERATESERIES(10, 80, 5)
+
+	annotation PBI_ResultType = Table
+	annotation PBI_NavigationStepName = Navigation

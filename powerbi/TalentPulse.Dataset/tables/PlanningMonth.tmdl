@@ -1,0 +1,25 @@
+table PlanningMonth
+	lineageTag: tbl-planningmonth
+
+	column 'Month Offset'
+		dataType: int64
+		isKey: true
+		lineageTag: col-pm-offset
+		summarizeBy: none
+
+	column 'Month Label'
+		dataType: string
+		lineageTag: col-pm-label
+		summarizeBy: none
+		sortByColumn: 'Month Offset'
+
+	partition PlanningMonth = calculated
+		mode: import
+		source = ```
+			ADDCOLUMNS (
+			    GENERATESERIES ( 1, 12, 1 ),
+			    "Month Label", "Month " & FORMAT ( [Value], "00" )
+			)
+			```
+
+	annotation PBI_ResultType = Table

@@ -221,11 +221,114 @@ DEFINE
     MEASURE Application[Funnel Conversion %] =
         DIVIDE ( [Funnel Count], CALCULATE ( [Funnel Count], FunnelStage[Stage] = "Applied" ) )
 
+    // ---------------------------------------------------------------- workforce planning (what-if)
+
+    /// Starting headcount for the planning horizon (removes Calendar filter context)
+    MEASURE WorkforcePlan[Plan: Base Headcount] =
+        CALCULATE ( [Headcount], REMOVEFILTERS ( 'Calendar' ) )
+
+    /// Projected headcount at the end of the 12-month horizon
+    MEASURE WorkforcePlan[Plan: Projected Headcount 12M] =
+        VAR BaseHC = [Plan: Base Headcount]
+        VAR GrowthRate = [Growth Rate Value]
+        RETURN
+            ROUND ( BaseHC * ( 1 + GrowthRate ), 0 )
+
+    /// Net new headcount needed to reach target (negative for downsizing)
+    MEASURE WorkforcePlan[Plan: Headcount Growth Delta] =
+        [Plan: Projected Headcount 12M] - [Plan: Base Headcount]
+
+    /// Replacement hires needed due to expected attrition (trapezoidal average HC)
+    MEASURE WorkforcePlan[Plan: Replacement Hires 12M] =
+        VAR BaseHC = [Plan: Base Headcount]
+        VAR ProjHC = [Plan: Projected Headcount 12M]
+        VAR AvgHC = ( BaseHC + ProjHC ) / 2
+        VAR AttritionRate = [Attrition Rate Value]
+        RETURN
+            ROUND ( AvgHC * AttritionRate, 0 )
+
+    /// Total gross hires needed in 12 months = growth hires + attrition replacement (floor at 0)
+    MEASURE WorkforcePlan[Plan: Required Hires 12M] =
+        VAR GrowthDelta = [Plan: Headcount Growth Delta]
+        VAR ReplacementHires = [Plan: Replacement Hires 12M]
+        RETURN
+            MAX ( 0, GrowthDelta + ReplacementHires )
+
+    /// Actual attrition rate from the last 12 months (for scenario comparison)
+    MEASURE WorkforcePlan[Plan: Actual Attrition R12M] =
+        CALCULATE ( [Attrition Rate R12M], REMOVEFILTERS ( 'Calendar' ) )
+
+    /// Difference between scenario and actual attrition rate
+    MEASURE WorkforcePlan[Plan: Attrition Scenario vs Actual] =
+        [Attrition Rate Value] - [Plan: Actual Attrition R12M]
+
+    /// Number of recruiters currently in Talent Acquisition
+    MEASURE WorkforcePlan[Plan: Current Recruiters] =
+        CALCULATE (
+            [Headcount],
+            REMOVEFILTERS ( 'Calendar' ),
+            OrgUnit[Function] = "HR",
+            OrgUnit[Department] = "Talent Acquisition"
+        )
+
+    /// Recruiters needed to close required hires = Required Hires 12M ÷ Hires/Recruiter/Year
+    MEASURE WorkforcePlan[Plan: Required Recruiters] =
+        VAR RequiredHires = [Plan: Required Hires 12M]
+        VAR RecruiterCapacity = [Recruiter Capacity Value]
+        RETURN
+            ROUND ( DIVIDE ( RequiredHires, RecruiterCapacity ), 1 )
+
+    /// Gap between required and current recruiter headcount
+    MEASURE WorkforcePlan[Plan: Recruiter Gap] =
+        [Plan: Required Recruiters] - [Plan: Current Recruiters]
+
+    /// Month-by-month projected headcount (used in line chart with PlanningMonth[Month Offset])
+    MEASURE WorkforcePlan[Plan: HC at Month] =
+        VAR MonthN = SELECTEDVALUE ( PlanningMonth[Month Offset], 0 )
+        VAR BaseHC = [Plan: Base Headcount]
+        VAR AnnualGrowth = [Growth Rate Value]
+        VAR AnnualAttrition = [Attrition Rate Value]
+        VAR MonthlyNetRate = ( 1 + AnnualGrowth ) ^ ( 1 / 12 ) - 1 - ( AnnualAttrition / 12 )
+        RETURN
+            IF (
+                MonthN = 0,
+                BaseHC,
+                ROUND ( BaseHC * ( 1 + MonthlyNetRate ) ^ MonthN, 0 )
+            )
+
+    /// Required hires per month (spread evenly across 12 months)
+    MEASURE WorkforcePlan[Plan: Hires at Month] =
+        VAR MonthN = SELECTEDVALUE ( PlanningMonth[Month Offset], 0 )
+        VAR RequiredHires12M = [Plan: Required Hires 12M]
+        RETURN
+            IF (
+                MonthN = 0,
+                BLANK (),
+                ROUND ( DIVIDE ( RequiredHires12M, 12 ), 0 )
+            )
+
+    /// Baseline average time to fill from live requisition data
+    MEASURE WorkforcePlan[Plan: Avg Time to Fill] =
+        CALCULATE ( [Avg Time to Fill (days)], REMOVEFILTERS ( 'Calendar' ) )
+
+    /// Estimated open pipeline size in-flight at any given time
+    MEASURE WorkforcePlan[Plan: Open Pipeline at Any Time] =
+        VAR MonthlyHires = DIVIDE ( [Plan: Required Hires 12M], 12 )
+        VAR AvgTTF = [Plan: Avg Time to Fill]
+        RETURN
+            ROUND ( MonthlyHires * DIVIDE ( AvgTTF, 30 ), 0 )
+
 EVALUATE
     ROW (
         "As of", [As Of Date],
         "Headcount", [Headcount],
         "Attrition R12M", [Attrition Rate R12M],
         "Avg time to fill", [Avg Time to Fill (days)],
-        "Offer acceptance", [Offer Acceptance Rate]
+        "Offer acceptance", [Offer Acceptance Rate],
+        "Plan Base HC", [Plan: Base Headcount],
+        "Plan Proj HC 12M", [Plan: Projected Headcount 12M],
+        "Plan Required Hires", [Plan: Required Hires 12M],
+        "Plan Current Recruiters", [Plan: Current Recruiters],
+        "Plan Required Recruiters", [Plan: Required Recruiters],
+        "Plan Recruiter Gap", [Plan: Recruiter Gap]
     )

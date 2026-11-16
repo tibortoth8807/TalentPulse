@@ -1,0 +1,173 @@
+table WorkforcePlan
+	lineageTag: tbl-workforceplan
+
+	column _Placeholder
+		dataType: string
+		isHidden: true
+		lineageTag: col-wp-placeholder
+		summarizeBy: none
+
+	/// Current headcount baseline (removes all calendar/slicer context – planning always starts from "now")
+	measure 'Plan: Base Headcount' = ```
+			CALCULATE ( [Headcount], REMOVEFILTERS ( 'Calendar' ) )
+			```
+		formatString: #,0
+		lineageTag: meas-wp-basehc
+		description: "Starting headcount for the planning horizon – point-in-time, removes calendar filter so slicers on the dashboard don't interfere with the projection baseline."
+
+	/// Projected headcount at the end of the 12-month horizon
+	measure 'Plan: Projected Headcount 12M' = ```
+			VAR BaseHC = [Plan: Base Headcount]
+			VAR GrowthRate = [Growth Rate Value]
+			RETURN
+			    ROUND ( BaseHC * ( 1 + GrowthRate ), 0 )
+			```
+		formatString: #,0
+		lineageTag: meas-wp-projhc
+		description: "Headcount at end of the 12-month planning horizon, applying the selected growth rate scenario."
+
+	/// Net new headcount needed to reach the target (can be negative for downsizing scenarios)
+	measure 'Plan: Headcount Growth Delta' = ```
+			[Plan: Projected Headcount 12M] - [Plan: Base Headcount]
+			```
+		formatString: +#,0;-#,0;0
+		lineageTag: meas-wp-delta
+		description: "Net headcount change over 12 months. Negative = downsizing scenario."
+
+	/// Replacement hires: people who must be replaced due to expected attrition
+	/// Uses the average of start and end headcount as the denominator (trapezoidal approximation)
+	measure 'Plan: Replacement Hires 12M' = ```
+			VAR BaseHC = [Plan: Base Headcount]
+			VAR ProjHC = [Plan: Projected Headcount 12M]
+			VAR AvgHC = ( BaseHC + ProjHC ) / 2
+			VAR AttritionRate = [Attrition Rate Value]
+			RETURN
+			    ROUND ( AvgHC * AttritionRate, 0 )
+			```
+		formatString: #,0
+		lineageTag: meas-wp-replacement
+		description: "Hires needed to replace expected leavers over 12 months. Uses trapezoidal average HC as denominator."
+
+	/// Total hires required = growth hires + replacement hires
+	/// For downsizing: growth delta is negative, so required hires = max(0, replacement - |delta|)
+	measure 'Plan: Required Hires 12M' = ```
+			VAR GrowthDelta = [Plan: Headcount Growth Delta]
+			VAR ReplacementHires = [Plan: Replacement Hires 12M]
+			RETURN
+			    MAX ( 0, GrowthDelta + ReplacementHires )
+			```
+		formatString: #,0
+		lineageTag: meas-wp-requiredhires
+		description: "Total gross hires needed in 12 months = growth hires + attrition replacement. Floor at 0 (no negative hires in a mild downsizing scenario where natural attrition covers the reduction)."
+
+	/// Actual attrition rate from the last 12 months (for scenario comparison)
+	measure 'Plan: Actual Attrition R12M' = ```
+			CALCULATE ( [Attrition Rate R12M], REMOVEFILTERS ( 'Calendar' ) )
+			```
+		formatString: 0.0%;-0.0%;0.0%
+		lineageTag: meas-wp-actualattrition
+		description: "Rolling 12M attrition from live data, calendar-filter removed so it always shows the most recent full year."
+
+	/// Delta between scenario and actual – helps the user see how aggressive their assumption is
+	measure 'Plan: Attrition Scenario vs Actual' = ```
+			[Attrition Rate Value] - [Plan: Actual Attrition R12M]
+			```
+		formatString: +0.0%;-0.0%;0.0%
+		lineageTag: meas-wp-attritiondelta
+		description: "How much the scenario attrition assumption differs from actual R12M attrition. Positive = more pessimistic than reality."
+
+	/// Number of recruiters currently in Talent Acquisition
+	measure 'Plan: Current Recruiters' = ```
+			CALCULATE (
+			    [Headcount],
+			    REMOVEFILTERS ( 'Calendar' ),
+			    OrgUnit[Function] = "HR",
+			    OrgUnit[Department] = "Talent Acquisition"
+			)
+			```
+		formatString: #,0
+		lineageTag: meas-wp-currentrec
+		description: "Current headcount in the Talent Acquisition department (HR function). Adjust the department filter if your org uses a different name."
+
+	/// Recruiters needed to close the required hires within 12 months
+	/// Formula: required_hires / recruiter_annual_capacity
+	/// Recruiter capacity default = 30 hires/year (adjustable via slicer)
+	measure 'Plan: Required Recruiters' = ```
+			VAR RequiredHires = [Plan: Required Hires 12M]
+			VAR RecruiterCapacity = [Recruiter Capacity Value]
+			RETURN
+			    ROUND ( DIVIDE ( RequiredHires, RecruiterCapacity ), 1 )
+			```
+		formatString: #,0.0
+		lineageTag: meas-wp-requiredrec
+		description: "FTE recruiters needed to deliver the required hires. = Required Hires 12M ÷ Hires-per-Recruiter-per-Year. Adjust the capacity slicer based on your team's throughput."
+
+	/// Gap between required and current recruiter headcount
+	measure 'Plan: Recruiter Gap' = ```
+			[Plan: Required Recruiters] - [Plan: Current Recruiters]
+			```
+		formatString: +#,0.0;-#,0.0;0.0
+		lineageTag: meas-wp-recgap
+		description: "Positive = you need to hire more recruiters. Negative = your team has spare capacity in this scenario."
+
+	/// Month-by-month projected headcount (used in line chart with PlanningMonth table on axis)
+	/// PlanningMonth[Month Offset] must be on the visual axis for this to work
+	measure 'Plan: HC at Month' = ```
+			VAR MonthN = SELECTEDVALUE ( PlanningMonth[Month Offset], 0 )
+			VAR BaseHC = [Plan: Base Headcount]
+			VAR AnnualGrowth = [Growth Rate Value]
+			VAR AnnualAttrition = [Attrition Rate Value]
+			-- Net monthly rate: compound growth minus monthly attrition drag
+			-- Growth is compounded; attrition is linear approximation per month
+			VAR MonthlyNetRate = ( 1 + AnnualGrowth ) ^ ( 1 / 12 ) - 1 - ( AnnualAttrition / 12 )
+			RETURN
+			    IF (
+			        MonthN = 0,
+			        BaseHC,
+			        ROUND ( BaseHC * ( 1 + MonthlyNetRate ) ^ MonthN, 0 )
+			    )
+			```
+		formatString: #,0
+		lineageTag: meas-wp-hcatmonth
+		description: "Projected headcount at month N of the planning horizon. Uses compound growth minus linear attrition drag. Requires PlanningMonth[Month Offset] on the visual axis."
+
+	/// Month-by-month hires needed (growth + replacement, spread evenly)
+	measure 'Plan: Hires at Month' = ```
+			VAR MonthN = SELECTEDVALUE ( PlanningMonth[Month Offset], 0 )
+			VAR RequiredHires12M = [Plan: Required Hires 12M]
+			RETURN
+			    IF (
+			        MonthN = 0,
+			        BLANK (),
+			        ROUND ( DIVIDE ( RequiredHires12M, 12 ), 0 )
+			    )
+			```
+		formatString: #,0
+		lineageTag: meas-wp-hiresatmonth
+		description: "Required hires per month, spread evenly across the 12-month horizon. Useful for recruiter workload planning."
+
+	/// Average time to fill from actual data (calendar-filter removed)
+	measure 'Plan: Avg Time to Fill' = ```
+			CALCULATE ( [Avg Time to Fill (days)], REMOVEFILTERS ( 'Calendar' ) )
+			```
+		formatString: 0.0
+		lineageTag: meas-wp-ttf
+		description: "Average time to fill from live requisition data, used as the baseline for recruiter pipeline planning."
+
+	/// Estimated pipeline size: hires in-flight at any moment
+	/// = monthly hire rate × (avg time to fill / 30)
+	measure 'Plan: Open Pipeline at Any Time' = ```
+			VAR MonthlyHires = DIVIDE ( [Plan: Required Hires 12M], 12 )
+			VAR AvgTTF = [Plan: Avg Time to Fill]
+			RETURN
+			    ROUND ( MonthlyHires * DIVIDE ( AvgTTF, 30 ), 0 )
+			```
+		formatString: #,0
+		lineageTag: meas-wp-pipeline
+		description: "Estimated number of open requisitions in-flight at any given time. = Monthly hires × (Avg Time to Fill / 30). Useful for capacity planning with the ATS."
+
+	partition WorkforcePlan = calculated
+		mode: import
+		source = DATATABLE ( "_", STRING, { { "" } } )
+
+	annotation PBI_ResultType = Table

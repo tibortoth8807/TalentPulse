@@ -1,0 +1,23 @@
+table WhatIf_AttritionRate
+	lineageTag: tbl-whatif-attrition
+
+	column 'Attrition Rate'
+		dataType: decimal
+		isKey: true
+		lineageTag: col-war-rate
+		summarizeBy: none
+		expression: GENERATESERIES(0.05, 0.4, 0.01)
+		formatString: 0%;-0%;0%
+		annotation PBI_FormatHint = {"isGeneralNumber":false}
+
+	measure 'Attrition Rate Value' = SELECTEDVALUE('WhatIf_AttritionRate'[Attrition Rate], 0.13)
+		formatString: 0%;-0%;0%
+		lineageTag: meas-war-value
+		description: "Selected annual attrition rate scenario; defaults to 13% (the model baseline) if no slicer selection."
+
+	partition WhatIf_AttritionRate = calculated
+		mode: import
+		source = GENERATESERIES(0.05, 0.4, 0.01)
+
+	annotation PBI_ResultType = Table
+	annotation PBI_NavigationStepName = Navigation

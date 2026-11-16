@@ -24,12 +24,19 @@ powerbi/
 │       ├── HeadcountMonthly.tmdl
 │       ├── EmployeeEvent.tmdl
 │       ├── Requisition.tmdl
-│       └── Application.tmdl
+│       ├── Application.tmdl
+│       ├── WhatIf_GrowthRate.tmdl        # what-if: growth parameter (-20%..+30%)
+│       ├── WhatIf_AttritionRate.tmdl     # what-if: attrition parameter (5%..40%)
+│       ├── WhatIf_RecruiterCapacity.tmdl # what-if: recruiter capacity parameter (10..80 hires/yr)
+│       ├── PlanningMonth.tmdl            # 12-month horizon projection axis
+│       └── WorkforcePlan.tmdl            # 14 workforce planning & capacity measures
 ├── TalentPulse.Report/           # report stub
 │   ├── definition.pbir
 │   └── report.json
 ├── bpa-rules.json                # Tabular Editor 2 BPA rule set
-└── bpa-run.sh                    # local BPA helper script
+├── bpa-run.sh                    # local BPA helper script
+├── workforce-plan-spec.md        # layout and visual specs for workforce planning page
+└── report-spec.md                # visual specification
 ```
 
 ## Opening the model
@@ -70,6 +77,7 @@ Helper:      SecurityUserCountry (RLS), FunnelStage (calculated)
 | **Movement** | Hires, Leavers, Promotions, Net Change, Promotion Rate R12M |
 | **Recruiting** | Requisitions Opened/Filled, Open Requisitions, Avg/Median Time to Fill, Cost per Hire |
 | **Pipeline** | Applications, Screen/Interview/Offer rates, Offer Acceptance Rate, Funnel Count |
+| **Workforce Planning (What-If)** | Base HC, Projected HC 12M, Required Hires 12M, Required Recruiters, Recruiter Gap, HC/Hires at Month |
 
 ### Row-Level Security
 

@@ -90,6 +90,16 @@ DATATABLE (
 
 Sort `FunnelStage[Stage]` by `StageOrder`. No relationships.
 
+## What-If & Planning Tables
+
+The following tables are decoupled from the star schema (no relationships):
+
+1. **`WhatIf_GrowthRate`**: `GENERATESERIES(-0.2, 0.3, 0.01)` – Slicer for annual target headcount growth (-20% to +30%). Default: 5%.
+2. **`WhatIf_AttritionRate`**: `GENERATESERIES(0.05, 0.4, 0.01)` – Slicer for projected annual attrition (5% to 40%). Default: 13%.
+3. **`WhatIf_RecruiterCapacity`**: `GENERATESERIES(10, 80, 5)` – Slicer for recruiter productivity (10 to 80 hires/recruiter/year). Default: 30.
+4. **`PlanningMonth`**: `ADDCOLUMNS(GENERATESERIES(1, 12, 1), "Month Label", "Month " & FORMAT([Value], "00"))` – Projection horizon axis.
+5. **`WorkforcePlan`**: Measure container holding the 14 planning and capacity measures (see [workforce-plan-spec.md](file:///c:/Users/vasal/GITRepo/TalentPulse/TalentPulse/powerbi/workforce-plan-spec.md)).
+
 ## Calculated columns
 
 ```dax

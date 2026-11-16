@@ -18,5 +18,10 @@ model TalentPulse
 	ref table EmployeeEvent
 	ref table Requisition
 	ref table Application
+	ref table WhatIf_GrowthRate
+	ref table WhatIf_AttritionRate
+	ref table WhatIf_RecruiterCapacity
+	ref table PlanningMonth
+	ref table WorkforcePlan
 
 	ref role 'Country HR'

@@ -1,0 +1,23 @@
+table WhatIf_GrowthRate
+	lineageTag: tbl-whatif-growthrate
+
+	column 'Growth Rate'
+		dataType: decimal
+		isKey: true
+		lineageTag: col-wgr-rate
+		summarizeBy: none
+		expression: GENERATESERIES(-0.2, 0.3, 0.01)
+		formatString: 0%;-0%;0%
+		annotation PBI_FormatHint = {"isGeneralNumber":false}
+
+	measure 'Growth Rate Value' = SELECTEDVALUE('WhatIf_GrowthRate'[Growth Rate], 0.05)
+		formatString: 0%;-0%;0%
+		lineageTag: meas-wgr-value
+		description: "Selected annual headcount growth rate scenario; defaults to 5% if no slicer selection."
+
+	partition WhatIf_GrowthRate = calculated
+		mode: import
+		source = GENERATESERIES(-0.2, 0.3, 0.01)
+
+	annotation PBI_ResultType = Table
+	annotation PBI_NavigationStepName = Navigation
