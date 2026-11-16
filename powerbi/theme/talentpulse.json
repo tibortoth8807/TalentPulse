@@ -1,0 +1,22 @@
+{
+  "name": "TalentPulse",
+  "dataColors": ["#0F766E", "#F59E0B", "#2563EB", "#DC2626", "#7C3AED", "#14B8A6", "#64748B", "#EA580C", "#16A34A", "#DB2777"],
+  "foreground": "#0F172A",
+  "foregroundNeutralSecondary": "#475569",
+  "background": "#FFFFFF",
+  "backgroundLight": "#F1F5F9",
+  "backgroundNeutral": "#E2E8F0",
+  "tableAccent": "#0F766E",
+  "good": "#16A34A",
+  "neutral": "#F59E0B",
+  "bad": "#DC2626",
+  "maximum": "#0F766E",
+  "center": "#99F6E4",
+  "minimum": "#F0FDFA",
+  "textClasses": {
+    "title": { "fontFace": "Segoe UI Semibold", "fontSize": 14, "color": "#0F172A" },
+    "header": { "fontFace": "Segoe UI Semibold", "fontSize": 12, "color": "#0F172A" },
+    "label": { "fontFace": "Segoe UI", "fontSize": 10, "color": "#475569" },
+    "callout": { "fontFace": "Segoe UI Semibold", "fontSize": 28, "color": "#0F766E" }
+  }
+}

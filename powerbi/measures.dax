@@ -1,0 +1,231 @@
+// =====================================================================================
+// TalentPulse - DAX measures
+// How to add them: Power BI Desktop > DAX query view > paste this whole file > Run,
+// then click "Update model with changes" (adds/updates every measure at once).
+// Set format strings afterwards (see model.md -> "Measure formats").
+// Prerequisite: the tables, relationships and the calculated table "FunnelStage" from model.md must exist.
+// =====================================================================================
+
+DEFINE
+
+    // ---------------------------------------------------------------- helpers
+
+    /// Last date with data (the HRIS extract date). Keeps "as of today" measures from running into the empty future.
+    MEASURE HeadcountMonthly[As Of Date] =
+        CALCULATE ( MAX ( HeadcountMonthly[MonthEnd] ), REMOVEFILTERS () )
+
+    // ---------------------------------------------------------------- workforce
+
+    /// Point-in-time headcount at the last month-end inside the selected period (semi-additive).
+    MEASURE HeadcountMonthly[Headcount] =
+        VAR LastSnapshot = MAX ( HeadcountMonthly[MonthEnd] )
+        RETURN
+            CALCULATE ( COUNTROWS ( HeadcountMonthly ), HeadcountMonthly[MonthEnd] = LastSnapshot )
+
+    MEASURE HeadcountMonthly[FTE] =
+        VAR LastSnapshot = MAX ( HeadcountMonthly[MonthEnd] )
+        RETURN
+            CALCULATE ( SUM ( HeadcountMonthly[FTE] ), HeadcountMonthly[MonthEnd] = LastSnapshot )
+
+    /// Average of the month-end headcounts in the period - the denominator of every rate.
+    MEASURE HeadcountMonthly[Average Headcount] =
+        AVERAGEX ( VALUES ( HeadcountMonthly[MonthEnd] ), CALCULATE ( COUNTROWS ( HeadcountMonthly ) ) )
+
+    MEASURE HeadcountMonthly[Headcount PY] =
+        CALCULATE ( [Headcount], DATEADD ( 'Calendar'[Date], -1, YEAR ) )
+
+    MEASURE HeadcountMonthly[Headcount YoY %] =
+        VAR Previous = [Headcount PY]
+        RETURN
+            DIVIDE ( [Headcount] - Previous, Previous )
+
+    MEASURE HeadcountMonthly[Average Tenure (years)] =
+        VAR LastSnapshot = MAX ( HeadcountMonthly[MonthEnd] )
+        RETURN
+            DIVIDE ( CALCULATE ( AVERAGE ( HeadcountMonthly[TenureMonths] ), HeadcountMonthly[MonthEnd] = LastSnapshot ), 12 )
+
+    MEASURE HeadcountMonthly[Average Age] =
+        VAR LastSnapshot = MAX ( HeadcountMonthly[MonthEnd] )
+        RETURN
+            CALCULATE ( AVERAGE ( HeadcountMonthly[Age] ), HeadcountMonthly[MonthEnd] = LastSnapshot )
+
+    MEASURE HeadcountMonthly[Female %] =
+        DIVIDE ( CALCULATE ( [Headcount], Employee[Gender] = "Female" ), [Headcount] )
+
+    MEASURE HeadcountMonthly[Remote / Hybrid %] =
+        DIVIDE ( CALCULATE ( [Headcount], Employee[WorkModel] IN { "Remote", "Hybrid" } ), [Headcount] )
+
+    // ---------------------------------------------------------------- movements
+
+    MEASURE EmployeeEvent[Hires] =
+        CALCULATE ( COUNTROWS ( EmployeeEvent ), EmployeeEvent[EventType] = "Hire" )
+
+    MEASURE EmployeeEvent[Leavers] =
+        CALCULATE ( COUNTROWS ( EmployeeEvent ), EmployeeEvent[EventType] = "Termination" )
+
+    MEASURE EmployeeEvent[Voluntary Leavers] =
+        CALCULATE ( [Leavers], Employee[TerminationType] = "Voluntary" )
+
+    MEASURE EmployeeEvent[Promotions] =
+        CALCULATE ( COUNTROWS ( EmployeeEvent ), EmployeeEvent[EventType] = "Promotion" )
+
+    MEASURE EmployeeEvent[Net Change] = [Hires] - [Leavers]
+
+    /// Leavers who left within 12 months of joining, as a share of all leavers ("regretted onboarding" signal).
+    MEASURE EmployeeEvent[Early Leavers %] =
+        VAR Early =
+            CALCULATE (
+                [Leavers],
+                FILTER (
+                    EmployeeEvent,
+                    DATEDIFF ( RELATED ( Employee[HireDate] ), EmployeeEvent[Date], MONTH ) < 12
+                )
+            )
+        RETURN
+            DIVIDE ( Early, [Leavers] )
+
+    // ---------------------------------------------------------------- attrition
+
+    /// Attrition in the selected period: leavers / average headcount (not annualized).
+    MEASURE EmployeeEvent[Attrition Rate] =
+        DIVIDE ( [Leavers], [Average Headcount] )
+
+    /// Rolling 12 months ending at the last date of the selection - the KPI HR leadership usually tracks.
+    MEASURE EmployeeEvent[Attrition Rate R12M] =
+        VAR EndDate = MIN ( MAX ( 'Calendar'[Date] ), [As Of Date] )
+        VAR Period = DATESINPERIOD ( 'Calendar'[Date], EndDate, -12, MONTH )
+        RETURN
+            DIVIDE ( CALCULATE ( [Leavers], Period ), CALCULATE ( [Average Headcount], Period ) )
+
+    MEASURE EmployeeEvent[Voluntary Attrition R12M] =
+        VAR EndDate = MIN ( MAX ( 'Calendar'[Date] ), [As Of Date] )
+        VAR Period = DATESINPERIOD ( 'Calendar'[Date], EndDate, -12, MONTH )
+        RETURN
+            DIVIDE ( CALCULATE ( [Voluntary Leavers], Period ), CALCULATE ( [Average Headcount], Period ) )
+
+    MEASURE EmployeeEvent[Promotion Rate R12M] =
+        VAR EndDate = MIN ( MAX ( 'Calendar'[Date] ), [As Of Date] )
+        VAR Period = DATESINPERIOD ( 'Calendar'[Date], EndDate, -12, MONTH )
+        RETURN
+            DIVIDE ( CALCULATE ( [Promotions], Period ), CALCULATE ( [Average Headcount], Period ) )
+
+    // ---------------------------------------------------------------- requisitions
+
+    MEASURE Requisition[Requisitions Opened] =
+        COUNTROWS ( Requisition )
+
+    /// Counted on the offer-accepted date (inactive relationship FilledDate -> Calendar).
+    MEASURE Requisition[Requisitions Filled] =
+        CALCULATE (
+            COUNTROWS ( Requisition ),
+            USERELATIONSHIP ( Requisition[FilledDate], 'Calendar'[Date] )
+        )
+
+    /// Open at the end of the selected period: opened before, not yet filled or cancelled.
+    MEASURE Requisition[Open Requisitions] =
+        VAR AsOf = MIN ( MAX ( 'Calendar'[Date] ), [As Of Date] )
+        RETURN
+            CALCULATE (
+                COUNTROWS ( Requisition ),
+                REMOVEFILTERS ( 'Calendar' ),
+                Requisition[OpenedDate] <= AsOf,
+                OR ( ISBLANK ( Requisition[FilledDate] ), Requisition[FilledDate] > AsOf ),
+                OR ( ISBLANK ( Requisition[CancelledDate] ), Requisition[CancelledDate] > AsOf )
+            )
+
+    MEASURE Requisition[Open Requisitions > 60 Days] =
+        VAR AsOf = MIN ( MAX ( 'Calendar'[Date] ), [As Of Date] )
+        RETURN
+            CALCULATE (
+                [Open Requisitions],
+                Requisition[OpenedDate] < AsOf - 60
+            )
+
+    /// Requisition opened -> offer accepted, for requisitions filled in the period.
+    MEASURE Requisition[Avg Time to Fill (days)] =
+        CALCULATE (
+            AVERAGE ( Requisition[DaysToFill] ),
+            USERELATIONSHIP ( Requisition[FilledDate], 'Calendar'[Date] )
+        )
+
+    MEASURE Requisition[Median Time to Fill (days)] =
+        CALCULATE (
+            MEDIAN ( Requisition[DaysToFill] ),
+            USERELATIONSHIP ( Requisition[FilledDate], 'Calendar'[Date] )
+        )
+
+    MEASURE Requisition[Hiring Cost (EUR)] =
+        CALCULATE (
+            SUM ( Requisition[HireCostEur] ),
+            USERELATIONSHIP ( Requisition[FilledDate], 'Calendar'[Date] )
+        )
+
+    MEASURE Requisition[Cost per Hire (EUR)] =
+        DIVIDE ( [Hiring Cost (EUR)], [Requisitions Filled] )
+
+    // ---------------------------------------------------------------- recruiting funnel
+
+    MEASURE Application[Applications] =
+        COUNTROWS ( Application )
+
+    MEASURE Application[Screened] =
+        SUM ( Application[ReachedScreen] )
+
+    MEASURE Application[Interviewed] =
+        SUM ( Application[ReachedInterview] )
+
+    MEASURE Application[Offers] =
+        SUM ( Application[ReachedOffer] )
+
+    MEASURE Application[Accepted Offers] =
+        SUM ( Application[IsHire] )
+
+    MEASURE Application[Screen Pass Rate] =
+        DIVIDE ( [Screened], [Applications] )
+
+    MEASURE Application[Interview Rate] =
+        DIVIDE ( [Interviewed], [Screened] )
+
+    MEASURE Application[Offer Rate] =
+        DIVIDE ( [Offers], [Interviewed] )
+
+    /// Accepted / decided offers (open offers are excluded).
+    MEASURE Application[Offer Acceptance Rate] =
+        DIVIDE (
+            [Accepted Offers],
+            CALCULATE ( [Offers], Application[Outcome] IN { "Hired", "OfferAccepted", "OfferDeclined" } )
+        )
+
+    MEASURE Application[Applications per Hire] =
+        DIVIDE ( [Applications], [Accepted Offers] )
+
+    /// Candidate applied -> offer accepted.
+    MEASURE Application[Avg Time to Hire (days)] =
+        AVERAGE ( Application[DaysToHire] )
+
+    /// Hires per application - the "quality" of a source.
+    MEASURE Application[Source Hire Rate] =
+        DIVIDE ( [Accepted Offers], [Applications] )
+
+    /// Value for the funnel visual, driven by the FunnelStage table (see model.md).
+    MEASURE Application[Funnel Count] =
+        SWITCH (
+            SELECTEDVALUE ( FunnelStage[Stage] ),
+            "Applied", [Applications],
+            "Screened", [Screened],
+            "Interviewed", [Interviewed],
+            "Offered", [Offers],
+            "Hired", [Accepted Offers]
+        )
+
+    MEASURE Application[Funnel Conversion %] =
+        DIVIDE ( [Funnel Count], CALCULATE ( [Funnel Count], FunnelStage[Stage] = "Applied" ) )
+
+EVALUATE
+    ROW (
+        "As of", [As Of Date],
+        "Headcount", [Headcount],
+        "Attrition R12M", [Attrition Rate R12M],
+        "Avg time to fill", [Avg Time to Fill (days)],
+        "Offer acceptance", [Offer Acceptance Rate]
+    )

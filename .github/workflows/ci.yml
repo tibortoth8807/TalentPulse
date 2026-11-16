@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  generate:
+    name: Build, test and generate data
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build
+        run: dotnet build TalentPulse.slnx -c Release
+
+      - name: Test (data invariants)
+        run: dotnet test TalentPulse.slnx -c Release --no-build --logger trx --results-directory TestResults
+
+      - name: Generate dataset
+        run: dotnet run --project src/TalentPulse.Generator -c Release --no-build -- --out generated
+
+      # The committed /data folder must be exactly what the generator produces (same seed => same files).
+      # Same seed => same data. If the committed /data differs, regenerate and commit it (warning only).
+      - name: Check committed data is up to date
+        run: |
+          stale=0
+          for f in generated/*.csv; do
+            if [ -f "data/$(basename "$f")" ] && ! cmp -s "$f" "data/$(basename "$f")"; then stale=1; echo "differs: $(basename "$f")"; fi
+          done
+          if [ "$stale" = 1 ]; then echo "::warning::data/ is not up to date with the generator - regenerate and commit it."; else echo "data/ OK"; fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: talentpulse-data
+          path: generated

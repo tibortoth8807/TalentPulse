@@ -1,0 +1,17 @@
+# .NET
+bin/
+obj/
+*.user
+.vs/
+TestResults/
+
+# Power BI project local files (keep the definition, not the cache)
+**/.pbi/localSettings.json
+**/.pbi/cache.abf
+*.pbix.bak
+
+# Editors / OS
+.idea/
+.vscode/*
+.DS_Store
+Thumbs.db

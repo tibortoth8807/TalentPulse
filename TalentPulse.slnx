@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TalentPulse.Generator/TalentPulse.Generator.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TalentPulse.Tests/TalentPulse.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,4 @@
+* text=auto
+*.csv text eol=lf
+*.pq text
+*.dax text
